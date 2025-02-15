@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #FBF9F5;
+            font-family: Arial, sans-serif;
+            flex-direction: column;
+        }
+        .container {
+            background: #E1F1FF;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            width: 320px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        input, button {
+            margin-top: 10px;
+            padding: 12px;
+            width: 100%;
+            border: none;
+            border-radius: 5px;
+            display: block;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        input {
+            background: #FBF9F5;
+            color: #514943;
+        }
+        button {
+            background: #B19081;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #514943;
+        }
+        #weather-results {
+            width: 320px;
+            margin-top: 15px;
+            font-size: 14px;
+            text-align: center;
+            background: #E1F1FF;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            min-width: 300px;
+            display: none; /* Initially hidden */
+            color: #514943;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <form id="weather-form">
+            <label for="cities">Enter cities (separated by a comma or semicolon):</label>
+            <div class="form-group">
+                <input type="text" id="cities" name="cities" required>
+                <button type="submit">Get Weather</button>
+            </div>
+        </form>
+    </div>
+    <div id="weather-results"></div>
+
+    <script>
+        const cityTranslations = {
+            "Praha": "Prague",
+            "Brno": "Brno",
+            "Ostrava": "Ostrava",
+            "Plzeň": "Pilsen",
+            "Olomouc": "Olomouc"
+        };
+
+        document.getElementById("weather-form").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            
+            const inputField = document.getElementById("cities");
+            const citiesInput = inputField.value.trim();
+            const resultsContainer = document.getElementById("weather-results");
+            resultsContainer.innerHTML = ""; 
+            resultsContainer.style.display = "none"; // Hide results initially
+
+            if (!citiesInput) return;
+
+            let cities = citiesInput.split(/[,;]/).map(city => city.trim()).filter(city => city);
+            
+            if (cities.length > 3) {
+                resultsContainer.innerHTML = "<p>You can enter a maximum of 3 cities.</p>";
+                resultsContainer.style.display = "block";
+                return;
+            }
+
+            for (let city of cities) {
+                city = cityTranslations[city] || city; // Translate if exists
+                
+                try {
+                    const geoResponse = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1`);
+                    if (!geoResponse.ok) throw new Error("Error fetching geolocation data");
+                    const geoData = await geoResponse.json();
+                    
+                    if (!geoData.results || geoData.results.length === 0) {
+                        resultsContainer.innerHTML += `<p>Cannot find city: ${city}</p>`;
+                        continue;
+                    }
+                    
+                    const location = geoData.results[0];
+                    if (location.name.toLowerCase() !== city.toLowerCase()) {
+                        resultsContainer.innerHTML += `<p>Could not find an exact match for: ${city}</p>`;
+                        continue;
+                    }
+                    
+                    const { latitude, longitude } = location;
+                    const weatherResponse = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true&daily=temperature_2m_min,temperature_2m_max&temperature_unit=celsius&timezone=auto`);
+                    if (!weatherResponse.ok) throw new Error("Error fetching weather forecast");
+                    const weatherData = await weatherResponse.json();
+                    
+                    if (!weatherData.current_weather || !weatherData.daily || !weatherData.daily.temperature_2m_min || !weatherData.daily.temperature_2m_max) {
+                        resultsContainer.innerHTML += `<p>Could not retrieve weather data for: ${city}</p>`;
+                        continue;
+                    }
+                    
+                    const currentTemp = weatherData.current_weather.temperature;
+                    const minTemp = weatherData.daily.temperature_2m_min[0];
+                    const maxTemp = weatherData.daily.temperature_2m_max[0];
+                    resultsContainer.innerHTML += `<p><strong>${city}:</strong></p>
+                        <div>
+                            <p>Current temperature: ${currentTemp}°C</p>
+                            <p>Min temperature: ${minTemp}°C</p>
+                            <p>Max temperature: ${maxTemp}°C</p>
+                        </div>`;
+                    resultsContainer.style.display = "block"; // Show results when data is available
+                } catch (error) {
+                    resultsContainer.innerHTML += `<p>Error fetching data for: ${city}. ${error.message}</p>`;
+                    resultsContainer.style.display = "block";
+                }
+            }
+        });
+    </script>
+</body>
+</html>
